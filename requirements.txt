@@ -1,6 +1,5 @@
 streamlit
 batman-package
-scipy<1.11.0
 emcee
 corner
 plotly
@@ -8,4 +7,4 @@ pandas
 numpy
 matplotlib
 setuptools
-chainconsumer
+chainconsumer>=1.3.0
