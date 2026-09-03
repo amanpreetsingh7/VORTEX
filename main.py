@@ -5,7 +5,7 @@ import plotly.graph_objects as go
 import batman
 import scipy.linalg
 import emcee
-import corner
+from chainconsumer import ChainConsumer, Chain, Truth
 import matplotlib.pyplot as plt
 
 
@@ -311,13 +311,20 @@ with tab4:
 
             flat_samples = sampler.get_chain(discard=50, thin=2, flat=True)
 
-            fig = corner.corner(flat_samples, labels=["Radius Ratio (Rp/Rs)", "Inclination (Deg)"],
-                                truths=[true_rp_rs, inc], color="#00f0ff", truth_color="#ffaa00")
+            df = pd.DataFrame(flat_samples, columns=["Radius Ratio (Rp/Rs)", "Inclination (Deg)"])
+            c = ChainConsumer()
+            c.add_chain(Chain(samples=df, name="VORTEX Retrieval"))
+            c.add_truth(Truth(location={"Radius Ratio (Rp/Rs)": true_rp_rs, "Inclination (Deg)": inc}))
+
+            fig = c.plot()
             fig.patch.set_facecolor('#05080e')
             for ax in fig.get_axes():
                 ax.tick_params(colors='#d1e2f7')
                 ax.xaxis.label.set_color('#d1e2f7')
                 ax.yaxis.label.set_color('#d1e2f7')
+                if ax.get_title():
+                    ax.title.set_color('#d1e2f7')
+
             st.pyplot(fig)
 
 with tab5:
