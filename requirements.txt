@@ -1,6 +1,6 @@
 streamlit
 batman-package
-scipy
+scipy<1.11.0
 emcee
 corner
 plotly
