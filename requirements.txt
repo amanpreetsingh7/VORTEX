@@ -1,0 +1,9 @@
+streamlit
+batman-package
+scipy
+emcee
+corner
+plotly
+pandas
+numpy
+matplotlib
