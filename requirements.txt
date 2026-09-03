@@ -8,3 +8,4 @@ numpy
 matplotlib
 setuptools
 chainconsumer
+scipy<1.11.0
