@@ -5,7 +5,7 @@ import plotly.graph_objects as go
 import batman
 import scipy.linalg
 import emcee
-from chainconsumer import ChainConsumer, Chain, Truth
+from chainconsumer import ChainConsumer
 import matplotlib.pyplot as plt
 
 
@@ -311,12 +311,10 @@ with tab4:
 
             flat_samples = sampler.get_chain(discard=50, thin=2, flat=True)
 
-            df = pd.DataFrame(flat_samples, columns=["Radius Ratio (Rp/Rs)", "Inclination (Deg)"])
             c = ChainConsumer()
-            c.add_chain(Chain(samples=df, name="VORTEX Retrieval"))
-            c.add_truth(Truth(location={"Radius Ratio (Rp/Rs)": true_rp_rs, "Inclination (Deg)": inc}))
+            c.add_chain(flat_samples, parameters=["Radius Ratio (Rp/Rs)", "Inclination (Deg)"], name="VORTEX Retrieval")
 
-            fig = c.plot()
+            fig = c.plotter.plot(truth=[true_rp_rs, inc])
             fig.patch.set_facecolor('#05080e')
             for ax in fig.get_axes():
                 ax.tick_params(colors='#d1e2f7')
