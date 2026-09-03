@@ -267,6 +267,21 @@ with tab1:
                          paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', height=400)
     st.plotly_chart(fig_lc, use_container_width=True)
 
+    st.markdown("---")
+    lc_df = pd.DataFrame({
+        "Time (Days)": t_obs,
+        "Raw Flux": raw_flux,
+        "GP Cleaned Flux": cleaned_flux,
+        "Uncertainty": err_array
+    })
+    csv = lc_df.to_csv(index=False).encode('utf-8')
+    st.download_button(
+        label="📥 DOWNLOAD LIGHT CURVE DATA (CSV)",
+        data=csv,
+        file_name=f"vortex_lightcurve_{obs_name.split()[0]}.csv",
+        mime="text/csv",
+    )
+
 with tab2:
     col_a, col_b = st.columns(2)
     with col_a:
