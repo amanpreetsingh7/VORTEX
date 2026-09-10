@@ -2417,15 +2417,124 @@ st.set_page_config(
 st.markdown(
     """
     <style>
-      .stApp { background-color: #05080e; }
-      h1,h2,h3,h4 { letter-spacing: .02em; }
-      div[data-testid="stMetric"] {
-        background:#0b111e; border:1px solid #1a273e; border-radius:8px; padding:10px 14px;
+      /* Global app */
+      .stApp {
+        background-color: #05080e;
+        color: #dbe8f5;
       }
-      div[data-testid="stMetricValue"] { color:#79e6f2; }
-      section[data-testid="stSidebar"] { background:#090e18; }
-      .vortex-note {padding:.65rem .8rem;border:1px solid #26364e;border-radius:7px;background:#0b111e;}
-      .vortex-small {opacity:.78;font-size:.88rem;}
+
+      html, body, [class*="css"] {
+        color: #dbe8f5;
+      }
+
+      /* Main text */
+      h1, h2, h3, h4, h5, h6,
+      p, span, div, label, li, small {
+        color: #dbe8f5;
+      }
+
+      h1, h2, h3, h4 {
+        letter-spacing: .02em;
+      }
+
+      /* Captions / secondary text */
+      .stCaption, .vortex-small {
+        color: #8fa8c6 !important;
+        opacity: 1 !important;
+        font-size: .88rem;
+      }
+
+      /* Sidebar */
+      section[data-testid="stSidebar"] {
+        background: #090e18;
+      }
+
+      section[data-testid="stSidebar"] * {
+        color: #dbe8f5 !important;
+      }
+
+      /* Metric cards */
+      div[data-testid="stMetric"] {
+        background: #0b111e;
+        border: 1px solid #1a273e;
+        border-radius: 8px;
+        padding: 10px 14px;
+      }
+
+      div[data-testid="stMetricValue"] {
+        color: #79e6f2 !important;
+      }
+
+      div[data-testid="stMetricLabel"] {
+        color: #8fa8c6 !important;
+      }
+
+      div[data-testid="stMetricLabel"] * {
+        color: #8fa8c6 !important;
+      }
+
+      /* Markdown containers */
+      [data-testid="stMarkdownContainer"] * {
+        color: #dbe8f5 !important;
+      }
+
+      /* Tabs */
+      button[data-baseweb="tab"] {
+        color: #8fa8c6 !important;
+      }
+
+      button[data-baseweb="tab"][aria-selected="true"] {
+        color: #00f0ff !important;
+        border-bottom: 2px solid #00f0ff !important;
+      }
+
+      /* Expander */
+      details, summary {
+        color: #dbe8f5 !important;
+      }
+
+      /* Inputs and selectboxes */
+      .stSelectbox label,
+      .stNumberInput label,
+      .stSlider label,
+      .stCheckbox label,
+      .stRadio label,
+      .stTextInput label,
+      .stTextArea label {
+        color: #dbe8f5 !important;
+      }
+
+      [data-baseweb="select"] * {
+        color: #dbe8f5 !important;
+      }
+
+      input, textarea {
+        color: #dbe8f5 !important;
+        background-color: #0b111e !important;
+      }
+
+      /* Buttons */
+      .stButton > button {
+        background: #00f0ff;
+        color: #041018 !important;
+        border: none;
+        border-radius: 8px;
+        font-weight: 600;
+      }
+
+      .stButton > button:hover {
+        background: #00d2e0;
+        color: #041018 !important;
+      }
+
+      /* Custom info boxes */
+      .vortex-note {
+        padding: .65rem .8rem;
+        border: 1px solid #26364e;
+        border-radius: 7px;
+        background: #0b111e;
+        color: #dbe8f5 !important;
+      }
     </style>
     """,
     unsafe_allow_html=True,
