@@ -3874,7 +3874,7 @@ st.divider()
 st.markdown(
     "<p style='text-align:center;color:#7890aa;font-size:.88rem;'>"
     f"VORTEX Professional v{APP_VERSION} | Designed &amp; Developed by <b>Amanpreet Singh</b><br>"
-    "Astrophysics &amp; Transit Modeling | University of Arizona<br>"
+    "Astrophysics &amp; Transit Modeling<br>"
     "Scientific software prototype: inspect assumptions, convergence, and instrument-specific limitations before publication use."
     "</p>",
     unsafe_allow_html=True,
