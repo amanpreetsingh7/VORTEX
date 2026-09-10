@@ -10,3 +10,5 @@ setuptools
 chainconsumer<1.0.0
 scipy<1.11.0
 scikit-learn
+transitleastsquares
+astropy
