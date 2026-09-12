@@ -3091,14 +3091,40 @@ except Exception:
 # -----------------------------------------------------------------------------
 
 c1, c2, c3, c4, c5, c6 = st.columns(6)
-c1.metric("Data", f"{len(t_obs)} pts", delta=f"{span_days*24:.2f} h")
+
+# Compact, unit-aware summary metrics.
+# Detailed values remain available elsewhere in the analysis tabs.
+c1.metric(
+    "Data",
+    f"{len(t_obs)} points",
+    delta=f"{span_days*24:.2f} h span",
+    delta_color="off",
+)
 c2.metric("Search", str(search_result.get("search_method", "—")))
-c3.metric("Period", f"{recovered_p:.6g} d" if np.isfinite(recovered_p) else "—")
-c4.metric("T0", f"{display_time(recovered_t0, display_offset):.6f}" if np.isfinite(recovered_t0) else "—")
+c3.metric(
+    "Period",
+    f"{recovered_p:.2f} days" if np.isfinite(recovered_p) else "—",
+)
+c4.metric(
+    "T0",
+    f"{display_time(recovered_t0, display_offset):.2f} days"
+    if np.isfinite(recovered_t0)
+    else "—",
+)
 sde_val = float(search_result.get("SDE", np.nan))
 snr_search = float(search_result.get("snr", np.nan))
-c5.metric("SDE / BLS SNR", f"{sde_val:.2f}" if np.isfinite(sde_val) else (f"{snr_search:.2f}" if np.isfinite(snr_search) else "—"))
-c6.metric("Thermal Fp/F*", f"{engine.thermal_fp:.2e}")
+c5.metric(
+    "SDE / BLS SNR",
+    f"{sde_val:.2f}"
+    if np.isfinite(sde_val)
+    else (f"{snr_search:.2f}" if np.isfinite(snr_search) else "—"),
+)
+
+thermal_ppm = float(engine.thermal_fp) * 1e6
+c6.metric(
+    "Thermal Fp/F*",
+    f"{thermal_ppm:.0f} ppm" if np.isfinite(thermal_ppm) else "—",
+)
 
 st.caption(
     f"Source: **{source_label}** · cadence ≈ **{cadence_minutes:.3f} min** · "
@@ -3874,7 +3900,7 @@ st.divider()
 st.markdown(
     "<p style='text-align:center;color:#7890aa;font-size:.88rem;'>"
     f"VORTEX Professional v{APP_VERSION} | Designed &amp; Developed by <b>Amanpreet Singh</b><br>"
-    "Astrophysics &amp; Transit Modeling<br>"
+    "Astrophysics &amp; Transit Modeling | University of Arizona<br>"
     "Scientific software prototype: inspect assumptions, convergence, and instrument-specific limitations before publication use."
     "</p>",
     unsafe_allow_html=True,
