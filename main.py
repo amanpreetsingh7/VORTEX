@@ -3377,20 +3377,8 @@ with tabs[0]:
             connectgaps=False
         ))
 
-    # For synthetic ground-based observations, show the *same* daytime
-    # windows that were actually removed from the time sampling.
-    if (
-        workflow == "Explore / Simulate"
-        and not bool(obs_p.get("space", False))
-        and bool(apply_daytime_gaps)
-    ):
-        add_daytime_gap_shading(
-            fig,
-            baseline_days=float(sim_baseline),
-            night_hours=float(sim_night_hours),
-            phase_offset_days=float(window_phase),
-            x_offset=float(display_offset),
-        )
+    # Daytime gaps are represented directly by missing timestamps and
+    # broken traces, without gray shading over the plot background.
 
     fig.update_layout(
         template="plotly_dark",
@@ -3407,8 +3395,8 @@ with tabs[0]:
         and bool(apply_daytime_gaps)
     ):
         st.caption(
-            "Gray bands are true daytime gaps: those timestamps were removed from the "
-            "synthetic dataset before detrending and transit searching."
+            "Daytime gaps are represented as missing data: timestamps in those "
+            "intervals were removed before detrending and transit searching."
         )
 
     residual = cleaned_flux - fit_model_current
@@ -3417,20 +3405,6 @@ with tabs[0]:
         marker=dict(size=5), name="Residual"
     ))
     fig_r.add_hline(y=0)
-
-    if (
-        workflow == "Explore / Simulate"
-        and not bool(obs_p.get("space", False))
-        and bool(apply_daytime_gaps)
-    ):
-        add_daytime_gap_shading(
-            fig_r,
-            baseline_days=float(sim_baseline),
-            night_hours=float(sim_night_hours),
-            phase_offset_days=float(window_phase),
-            x_offset=float(display_offset),
-            label_first=False,
-        )
 
     fig_r.update_layout(
         template="plotly_dark",
@@ -3724,15 +3698,6 @@ with tabs[4]:
                     name="Injected model", connectgaps=False
                 ))
 
-                if label == "MMT / MMIRS":
-                    mmt_profile = ObservatoryProfiles.get_profile("MMT / MMIRS (Ground)")
-                    add_daytime_gap_shading(
-                        fcmp,
-                        baseline_days=float(np.max(p["t"]) + np.median(np.diff(p["t"])) if len(p["t"]) > 1 else np.max(p["t"])),
-                        night_hours=float(mmt_profile["night_hours"]),
-                        phase_offset_days=0.0,
-                    )
-
                 fcmp.update_layout(
                     template="plotly_dark",
                     height=300,
@@ -3744,7 +3709,7 @@ with tabs[4]:
 
                 if label == "MMT / MMIRS":
                     st.caption(
-                        "Gray regions are the idealized daytime intervals removed from the MMT sampling."
+                        "Daytime intervals are represented by missing data in the MMT time series."
                     )
 
                 fw = go.Figure(go.Scatter(x=p["pwin"], y=p["wwin"], mode="lines"))
