@@ -3646,15 +3646,19 @@ with tabs[3]:
                 truth=truth,
                 panel_size=1.55,
             )
-            # Do not stretch to the Streamlit container width; preserve the
-            # compact physical size so browser zoom behaves normally.
-            st.pyplot(cfig, use_container_width=False)
+            # Center the compact science plot on the page so it looks cleaner
+            # in-browser and in screenshots, while preserving its fixed size.
+            left_spacer, center_plot, right_spacer = st.columns([1, 3, 1])
+            with center_plot:
+                st.pyplot(cfig, use_container_width=False)
             plt.close(cfig)
 
-            st.caption(
-                "Compact science view: Rp/Rs, impact parameter, T0, and period. "
-                "Nuisance parameters remain included in the retrieval and are available below."
-            )
+            _, center_caption, _ = st.columns([1, 3, 1])
+            with center_caption:
+                st.caption(
+                    "Compact science view: Rp/Rs, impact parameter, T0, and period. "
+                    "Nuisance parameters remain included in the retrieval and are available below."
+                )
 
             # Keep the table visible, but no longer competing with the plot.
             st.markdown("#### Posterior parameter summary")
@@ -3668,7 +3672,9 @@ with tabs[3]:
                     truth=truth,
                     panel_size=1.35,
                 )
-                st.pyplot(full_cfig, use_container_width=False)
+                left_full, center_full, right_full = st.columns([1, 3, 1])
+                with center_full:
+                    st.pyplot(full_cfig, use_container_width=False)
                 plt.close(full_cfig)
 
             # Convergence traces are available on demand.
