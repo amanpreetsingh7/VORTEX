@@ -1455,8 +1455,14 @@ def make_corner_plot(
     names: list[str],
     truth: Optional[Dict[str, float]] = None,
     max_points: int = 8000,
+    panel_size: float = 1.65,
 ) -> plt.Figure:
-    """Dependency-free corner-style posterior plot using Matplotlib."""
+    """Dependency-free corner-style posterior plot using Matplotlib.
+
+    ``panel_size`` controls the physical size of each parameter cell.  The
+    compact Bayesian presentation view uses a smaller value so the entire
+    four-parameter science corner plot can fit on a normal laptop screen.
+    """
     samples = np.asarray(samples, dtype=float)
     n_dim = len(names)
     if samples.shape[1] != n_dim:
@@ -1468,7 +1474,16 @@ def make_corner_plot(
     else:
         plot_samples = samples
 
-    fig, axes = plt.subplots(n_dim, n_dim, figsize=(2.5 * n_dim, 2.5 * n_dim))
+    fig_side = max(4.8, float(panel_size) * n_dim)
+    fig, axes = plt.subplots(
+        n_dim,
+        n_dim,
+        figsize=(fig_side, fig_side),
+        squeeze=False,
+    )
+
+    label_size = 8 if n_dim <= 4 else 7
+    tick_size = 7 if n_dim <= 4 else 6
 
     for i in range(n_dim):
         for j in range(n_dim):
@@ -1479,28 +1494,43 @@ def make_corner_plot(
                 continue
 
             if i == j:
-                ax.hist(plot_samples[:, j], bins=40, histtype="step", density=True)
+                ax.hist(plot_samples[:, j], bins=35, histtype="step", density=True)
                 if truth and names[j] in truth:
-                    ax.axvline(truth[names[j]], ls="--", lw=1.2)
+                    ax.axvline(truth[names[j]], ls="--", lw=1.1)
             else:
-                ax.scatter(plot_samples[:, j], plot_samples[:, i], s=2, alpha=0.12, rasterized=True)
+                ax.scatter(
+                    plot_samples[:, j],
+                    plot_samples[:, i],
+                    s=1.5,
+                    alpha=0.10,
+                    rasterized=True,
+                )
                 if truth:
                     if names[j] in truth:
-                        ax.axvline(truth[names[j]], ls="--", lw=0.8)
+                        ax.axvline(truth[names[j]], ls="--", lw=0.7)
                     if names[i] in truth:
-                        ax.axhline(truth[names[i]], ls="--", lw=0.8)
+                        ax.axhline(truth[names[i]], ls="--", lw=0.7)
+
+            ax.tick_params(axis="both", labelsize=tick_size, pad=1)
 
             if i == n_dim - 1:
-                ax.set_xlabel(names[j])
+                ax.set_xlabel(names[j], fontsize=label_size, labelpad=2)
             else:
                 ax.set_xticklabels([])
 
             if j == 0 and i > 0:
-                ax.set_ylabel(names[i])
+                ax.set_ylabel(names[i], fontsize=label_size, labelpad=2)
             elif j > 0:
                 ax.set_yticklabels([])
 
-    fig.tight_layout()
+    fig.subplots_adjust(
+        left=0.10,
+        right=0.985,
+        bottom=0.10,
+        top=0.985,
+        wspace=0.06,
+        hspace=0.06,
+    )
     return fig
 
 
@@ -3593,8 +3623,6 @@ with tabs[3]:
                     "Inspect traces and increase chain length / adjust priors before scientific interpretation."
                 )
 
-            # Full-width corner plot for presentation and easier reading.
-            st.markdown("#### Posterior corner plot")
             truth = None
             if workflow in {"Explore / Simulate", "Inject & Recover"}:
                 truth = {
@@ -3603,15 +3631,47 @@ with tabs[3]:
                     "Period": period_days,
                     "b": engine.impact_parameter(),
                 }
-            cfig = make_corner_plot(flat, names, truth=truth)
-            st.pyplot(cfig, use_container_width=True)
+
+            # Compact science-facing posterior view.  The MCMC still samples every
+            # configured parameter; this display simply focuses on the four core
+            # transit parameters so it fits on a normal laptop screen.
+            st.markdown("#### Posterior corner plot")
+            science_names = [name for name in ["Rp/Rs", "b", "T0", "Period"] if name in names]
+            science_idx = [names.index(name) for name in science_names]
+            science_flat = flat[:, science_idx]
+
+            cfig = make_corner_plot(
+                science_flat,
+                science_names,
+                truth=truth,
+                panel_size=1.55,
+            )
+            # Do not stretch to the Streamlit container width; preserve the
+            # compact physical size so browser zoom behaves normally.
+            st.pyplot(cfig, use_container_width=False)
             plt.close(cfig)
+
+            st.caption(
+                "Compact science view: Rp/Rs, impact parameter, T0, and period. "
+                "Nuisance parameters remain included in the retrieval and are available below."
+            )
 
             # Keep the table visible, but no longer competing with the plot.
             st.markdown("#### Posterior parameter summary")
             st.dataframe(summary, use_container_width=True, hide_index=True)
 
-            # Convergence traces are still available but do not dominate the page.
+            # Full all-parameter corner plot is retained for scientific inspection.
+            with st.expander("Show full posterior corner plot"):
+                full_cfig = make_corner_plot(
+                    flat,
+                    names,
+                    truth=truth,
+                    panel_size=1.35,
+                )
+                st.pyplot(full_cfig, use_container_width=False)
+                plt.close(full_cfig)
+
+            # Convergence traces are available on demand.
             with st.expander("Show MCMC trace diagnostics"):
                 trfig = make_trace_plot(np.asarray(mc["chain"]), names)
                 st.pyplot(trfig, use_container_width=True)
