@@ -3579,36 +3579,62 @@ with tabs[3]:
         names = list(mc["names"])
         if flat.size:
             summary = posterior_summary(flat, names)
-            st.dataframe(summary, use_container_width=True, hide_index=True)
+
+            # High-level diagnostics first
             aa, tt, nn = st.columns(3)
             aa.metric("Mean acceptance", f"{meta['acceptance']:.3f}")
             finite_tau = np.asarray(meta["tau"])[np.isfinite(meta["tau"])]
             tt.metric("Max autocorr time", f"{np.max(finite_tau):.1f}" if len(finite_tau) else "not converged")
             nn.metric("Posterior samples", f"{len(flat):,}")
-            if not (0.15 <= meta["acceptance"] <= 0.65):
-                st.warning("Acceptance fraction is outside a common practical range. Inspect traces and increase chain length / adjust priors before scientific interpretation.")
 
-            col_trace, col_corner = st.columns(2)
-            with col_trace:
+            if not (0.15 <= meta["acceptance"] <= 0.65):
+                st.warning(
+                    "Acceptance fraction is outside a common practical range. "
+                    "Inspect traces and increase chain length / adjust priors before scientific interpretation."
+                )
+
+            # Full-width corner plot for presentation and easier reading.
+            st.markdown("#### Posterior corner plot")
+            truth = None
+            if workflow in {"Explore / Simulate", "Inject & Recover"}:
+                truth = {
+                    "Rp/Rs": engine.rp_rs,
+                    "T0": reference_t0_internal,
+                    "Period": period_days,
+                    "b": engine.impact_parameter(),
+                }
+            cfig = make_corner_plot(flat, names, truth=truth)
+            st.pyplot(cfig, use_container_width=True)
+            plt.close(cfig)
+
+            # Keep the table visible, but no longer competing with the plot.
+            st.markdown("#### Posterior parameter summary")
+            st.dataframe(summary, use_container_width=True, hide_index=True)
+
+            # Convergence traces are still available but do not dominate the page.
+            with st.expander("Show MCMC trace diagnostics"):
                 trfig = make_trace_plot(np.asarray(mc["chain"]), names)
-                st.pyplot(trfig)
+                st.pyplot(trfig, use_container_width=True)
                 plt.close(trfig)
-            with col_corner:
-                truth = None
-                if workflow in {"Explore / Simulate", "Inject & Recover"}:
-                    truth = {"Rp/Rs": engine.rp_rs, "T0": reference_t0_internal, "Period": period_days, "b": engine.impact_parameter()}
-                cfig = make_corner_plot(flat, names, truth=truth)
-                st.pyplot(cfig)
-                plt.close(cfig)
 
             med = {name: float(np.median(flat[:, i])) for i, name in enumerate(names)}
-            ic = mcmc_information_criteria(t_obs, cleaned_flux, cleaned_err, engine, med, bool(meta["fit_ld"]))
+            ic = mcmc_information_criteria(
+                t_obs, cleaned_flux, cleaned_err, engine, med, bool(meta["fit_ld"])
+            )
             st.markdown("#### Quick transit-vs-null BIC diagnostic")
             st.dataframe(pd.DataFrame([ic]), use_container_width=True, hide_index=True)
-            st.caption("BIC is a model-selection diagnostic, not a false-alarm probability or planet-validation probability.")
+            st.caption(
+                "BIC is a model-selection diagnostic, not a false-alarm probability "
+                "or planet-validation probability."
+            )
 
             posterior_df = pd.DataFrame(flat, columns=names)
-            st.download_button("Download posterior samples CSV", posterior_df.to_csv(index=False), "vortex_posterior_samples.csv", "text/csv")
+            st.download_button(
+                "Download posterior samples CSV",
+                posterior_df.to_csv(index=False),
+                "vortex_posterior_samples.csv",
+                "text/csv",
+            )
 
 # === GROUND VS SPACE ===========================================================
 with tabs[4]:
