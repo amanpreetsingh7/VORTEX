@@ -661,7 +661,7 @@ class ObservatoryProfiles:
             "night_hours": 9.0, "diameter_m": 6.5, "systematic_floor_ppm": 500.0,
             "space": False, "lat_deg": 31.6887778, "lon_deg": -110.8845556,
             "height_m": 2606.0, "band_min_um": 0.9, "band_max_um": 2.4,
-            "coverage_note": "Idealized 9-hour nightly sampling for simulator comparisons; use Observing Planner for date-specific visibility.",
+            "coverage_note": "Idealized 9-hour nightly sampling with explicit daytime gaps for simulator comparisons; use Observing Planner for date-specific visibility.",
         },
         "Lazuli 3-m (Space; idealized continuous benchmark)": {
             "cadence_min": 5.0, "white_noise_ppm": 100.0, "red_noise_ppm": 50.0,
@@ -1863,14 +1863,158 @@ def spectral_window(t: np.ndarray, period_min: float, period_max: float, n_freq:
     return 1.0 / freqs, power
 
 
-def build_sampling_times(profile: Dict[str, Any], baseline_days: float, cadence_min: float, phase_offset_days: float = 0.0) -> np.ndarray:
-    dt = cadence_min / 1440.0
-    t = np.arange(0.0, baseline_days, dt)
-    if bool(profile.get("space", False)) or profile.get("night_hours", 24.0) >= 24.0:
+def build_sampling_times(
+    profile: Dict[str, Any],
+    baseline_days: float,
+    cadence_min: float,
+    phase_offset_days: float = 0.0,
+    apply_ground_daytime_gaps: bool = True,
+    night_hours_override: Optional[float] = None,
+) -> np.ndarray:
+    """
+    Build the observation timestamps used by the synthetic simulator.
+
+    Space profiles are sampled continuously.
+
+    Ground profiles can explicitly include the regular day/night window:
+    only ``night_hours`` out of each 24-hour cycle are retained.  The
+    remaining samples are not generated at all, so the daytime intervals
+    are genuine gaps in the dataset rather than cosmetic gaps in a plot.
+
+    ``phase_offset_days`` shifts the observing window relative to the
+    synthetic orbital ephemeris, which is useful for testing favorable and
+    unfavorable transit phases.
+    """
+    dt = float(cadence_min) / 1440.0
+    if not np.isfinite(dt) or dt <= 0:
+        raise ValueError("Cadence must be positive.")
+
+    t = np.arange(0.0, float(baseline_days), dt)
+
+    is_space = bool(profile.get("space", False))
+    default_night_hours = float(profile.get("night_hours", 24.0))
+    night_hours = (
+        default_night_hours
+        if night_hours_override is None
+        else float(night_hours_override)
+    )
+    night_hours = float(np.clip(night_hours, 0.0, 24.0))
+
+    # Space observatories, disabled gap modeling, or a 24-hour observing
+    # window remain continuously sampled.
+    if is_space or (not apply_ground_daytime_gaps) or night_hours >= 24.0:
         return t
-    hours = float(profile.get("night_hours", 9.0))
-    local_hour = np.mod((t + phase_offset_days) * 24.0, 24.0)
-    return t[local_hour < hours]
+
+    if night_hours <= 0:
+        return np.asarray([], dtype=float)
+
+    # The synthetic "night" occupies the first night_hours of each shifted
+    # 24-hour cycle. The phase offset controls where that window lands.
+    cycle_hour = np.mod((t + float(phase_offset_days)) * 24.0, 24.0)
+    observed = cycle_hour < night_hours
+    return t[observed]
+
+
+def ground_daytime_intervals(
+    baseline_days: float,
+    night_hours: float,
+    phase_offset_days: float = 0.0,
+) -> List[Tuple[float, float]]:
+    """
+    Return exact daytime intervals for the idealized repeating ground window.
+
+    These intervals match build_sampling_times(): each 24-hour cycle retains
+    ``night_hours`` and rejects the rest as daylight/not observed.
+    """
+    baseline_days = float(baseline_days)
+    night_hours = float(np.clip(night_hours, 0.0, 24.0))
+    if baseline_days <= 0 or night_hours >= 24.0:
+        return []
+
+    # Work in an unshifted cycle coordinate u = t + phase_offset.
+    u_start = float(phase_offset_days)
+    u_end = baseline_days + float(phase_offset_days)
+
+    first_day = int(np.floor(u_start)) - 1
+    last_day = int(np.ceil(u_end)) + 1
+
+    intervals: List[Tuple[float, float]] = []
+    night_fraction = night_hours / 24.0
+
+    for day in range(first_day, last_day + 1):
+        daylight_u0 = day + night_fraction
+        daylight_u1 = day + 1.0
+
+        # Transform back to plotted elapsed time.
+        x0 = daylight_u0 - float(phase_offset_days)
+        x1 = daylight_u1 - float(phase_offset_days)
+
+        x0 = max(0.0, x0)
+        x1 = min(baseline_days, x1)
+        if x1 > x0:
+            intervals.append((float(x0), float(x1)))
+
+    return intervals
+
+
+def add_daytime_gap_shading(
+    fig: go.Figure,
+    baseline_days: float,
+    night_hours: float,
+    phase_offset_days: float = 0.0,
+    x_offset: float = 0.0,
+    label_first: bool = True,
+) -> None:
+    """Shade the exact idealized daytime intervals used by the simulator."""
+    intervals = ground_daytime_intervals(
+        baseline_days=baseline_days,
+        night_hours=night_hours,
+        phase_offset_days=phase_offset_days,
+    )
+
+    for i, (x0, x1) in enumerate(intervals):
+        kwargs: Dict[str, Any] = {
+            "x0": x0 + float(x_offset),
+            "x1": x1 + float(x_offset),
+            "fillcolor": "rgba(150, 150, 150, 0.22)",
+            "line_width": 0,
+            "layer": "below",
+        }
+        if label_first and i == 0:
+            kwargs["annotation_text"] = "Daylight / not observed"
+            kwargs["annotation_position"] = "top left"
+        fig.add_vrect(**kwargs)
+
+
+def break_lines_at_large_gaps(
+    x: np.ndarray,
+    y: np.ndarray,
+    gap_factor: float = 2.0,
+) -> Tuple[np.ndarray, np.ndarray]:
+    """Insert NaNs so a Plotly line does not bridge unobserved intervals."""
+    x = np.asarray(x, dtype=float)
+    y = np.asarray(y, dtype=float)
+    if len(x) != len(y) or len(x) < 2:
+        return x, y
+
+    positive_dt = np.diff(x)
+    positive_dt = positive_dt[np.isfinite(positive_dt) & (positive_dt > 0)]
+    if len(positive_dt) == 0:
+        return x, y
+
+    cadence = float(np.median(positive_dt))
+    threshold = max(float(gap_factor) * cadence, cadence + 1e-12)
+
+    xs: List[float] = []
+    ys: List[float] = []
+    for i in range(len(x)):
+        xs.append(float(x[i]))
+        ys.append(float(y[i]))
+        if i < len(x) - 1 and (x[i + 1] - x[i]) > threshold:
+            xs.append(np.nan)
+            ys.append(np.nan)
+
+    return np.asarray(xs), np.asarray(ys)
 
 
 def simulate_profile_observation(
@@ -2817,10 +2961,50 @@ if workflow == "Explore / Simulate":
     sim_red_tau_hr = st.sidebar.number_input("Red-noise timescale (h)", min_value=0.01, value=2.0, step=0.25, key="sim_red_tau")
     variability_ppm = st.sidebar.number_input("Astrophysical variability semi-amplitude (ppm)", min_value=0.0, value=15000.0 if "VHS" in st.session_state.target_display_name else 1000.0, step=250.0, key="sim_var_ppm")
     variability_period_hr = st.sidebar.number_input("Variability period (h)", min_value=0.05, value=8.4, step=0.1, key="sim_var_period")
-    window_phase = st.sidebar.slider("Ground window phase offset (days)", 0.0, 1.0, value=0.0, step=0.01, key="window_phase")
+
+    if not bool(obs_p.get("space", False)):
+        st.sidebar.markdown("**Ground observing window**")
+        apply_daytime_gaps = st.sidebar.checkbox(
+            "Apply daytime gaps",
+            value=True,
+            key="apply_daytime_gaps",
+            help="When enabled, VORTEX removes daytime samples from every 24-hour cycle. "
+                 "The gaps therefore affect TLS/BLS recovery, phase coverage, GP detrending, "
+                 "and all downstream analysis—not just the figure.",
+        )
+        sim_night_hours = st.sidebar.number_input(
+            "Usable observing hours per night",
+            min_value=0.5,
+            max_value=24.0,
+            value=float(obs_p.get("night_hours", 9.0)),
+            step=0.5,
+            key="sim_night_hours",
+            help="Idealized usable ground-based observing duration in each 24-hour cycle.",
+        )
+        window_phase = st.sidebar.slider(
+            "Night-window phase offset (days)",
+            0.0,
+            1.0,
+            value=0.0,
+            step=0.01,
+            key="window_phase",
+            help="Shifts the repeating night/day window relative to the synthetic transit ephemeris.",
+        )
+    else:
+        apply_daytime_gaps = False
+        sim_night_hours = 24.0
+        window_phase = 0.0
+
     sim_seed = st.sidebar.number_input("Random seed", min_value=0, value=42, step=1, key="sim_seed")
 
-    t_obs = build_sampling_times(obs_p, float(sim_baseline), float(sim_cadence), float(window_phase))
+    t_obs = build_sampling_times(
+        obs_p,
+        float(sim_baseline),
+        float(sim_cadence),
+        float(window_phase),
+        apply_ground_daytime_gaps=bool(apply_daytime_gaps),
+        night_hours_override=float(sim_night_hours),
+    )
     reference_t0_internal = 0.25 * float(period_days)
     true_model = engine.generate_light_curve(
         t_obs, t0=reference_t0_internal,
@@ -3166,19 +3350,94 @@ tabs = st.tabs([
 # === DASHBOARD ================================================================
 with tabs[0]:
     st.subheader("Interactive light-curve workspace")
+
+    x_display = t_obs + display_offset
+    gp_x, gp_y = break_lines_at_large_gaps(x_display, gp_trend)
+    clean_x, clean_y = break_lines_at_large_gaps(x_display, cleaned_flux)
+    fit_x, fit_y = break_lines_at_large_gaps(x_display, fit_model_current)
+
     fig = go.Figure()
-    fig.add_trace(go.Scatter(x=t_obs + display_offset, y=raw_flux, mode="markers", name="Raw / injected", marker=dict(size=5), opacity=0.55))
-    fig.add_trace(go.Scatter(x=t_obs + display_offset, y=gp_trend, mode="lines", name="GP / baseline trend"))
-    fig.add_trace(go.Scatter(x=t_obs + display_offset, y=cleaned_flux, mode="markers+lines", name="Detrended", marker=dict(size=4), line=dict(width=1)))
+    fig.add_trace(go.Scatter(
+        x=x_display, y=raw_flux, mode="markers",
+        name="Raw / injected", marker=dict(size=5), opacity=0.55
+    ))
+    fig.add_trace(go.Scatter(
+        x=gp_x, y=gp_y, mode="lines",
+        name="GP / baseline trend", connectgaps=False
+    ))
+    fig.add_trace(go.Scatter(
+        x=clean_x, y=clean_y, mode="markers+lines",
+        name="Detrended", marker=dict(size=4), line=dict(width=1),
+        connectgaps=False
+    ))
     if np.any(np.abs(fit_model_current - 1.0) > 1e-10):
-        fig.add_trace(go.Scatter(x=t_obs + display_offset, y=fit_model_current, mode="lines", name="Recovered transit model", line=dict(width=2)))
-    fig.update_layout(template="plotly_dark", height=480, xaxis_title=display_time_label, yaxis_title="Normalized flux", hovermode="x unified")
+        fig.add_trace(go.Scatter(
+            x=fit_x, y=fit_y, mode="lines",
+            name="Recovered transit model", line=dict(width=2),
+            connectgaps=False
+        ))
+
+    # For synthetic ground-based observations, show the *same* daytime
+    # windows that were actually removed from the time sampling.
+    if (
+        workflow == "Explore / Simulate"
+        and not bool(obs_p.get("space", False))
+        and bool(apply_daytime_gaps)
+    ):
+        add_daytime_gap_shading(
+            fig,
+            baseline_days=float(sim_baseline),
+            night_hours=float(sim_night_hours),
+            phase_offset_days=float(window_phase),
+            x_offset=float(display_offset),
+        )
+
+    fig.update_layout(
+        template="plotly_dark",
+        height=480,
+        xaxis_title=display_time_label,
+        yaxis_title="Normalized flux",
+        hovermode="x unified",
+    )
     st.plotly_chart(fig, use_container_width=True)
 
+    if (
+        workflow == "Explore / Simulate"
+        and not bool(obs_p.get("space", False))
+        and bool(apply_daytime_gaps)
+    ):
+        st.caption(
+            "Gray bands are true daytime gaps: those timestamps were removed from the "
+            "synthetic dataset before detrending and transit searching."
+        )
+
     residual = cleaned_flux - fit_model_current
-    fig_r = go.Figure(go.Scatter(x=t_obs + display_offset, y=residual * 1e6, mode="markers", marker=dict(size=5), name="Residual"))
+    fig_r = go.Figure(go.Scatter(
+        x=x_display, y=residual * 1e6, mode="markers",
+        marker=dict(size=5), name="Residual"
+    ))
     fig_r.add_hline(y=0)
-    fig_r.update_layout(template="plotly_dark", height=260, xaxis_title=display_time_label, yaxis_title="Residual (ppm)")
+
+    if (
+        workflow == "Explore / Simulate"
+        and not bool(obs_p.get("space", False))
+        and bool(apply_daytime_gaps)
+    ):
+        add_daytime_gap_shading(
+            fig_r,
+            baseline_days=float(sim_baseline),
+            night_hours=float(sim_night_hours),
+            phase_offset_days=float(window_phase),
+            x_offset=float(display_offset),
+            label_first=False,
+        )
+
+    fig_r.update_layout(
+        template="plotly_dark",
+        height=260,
+        xaxis_title=display_time_label,
+        yaxis_title="Residual (ppm)",
+    )
     st.plotly_chart(fig_r, use_container_width=True)
 
     d_raw = estimate_depth_at_ephemeris(t_obs, raw_flux, err_array, recovered_t0, recovered_p, recovered_duration)
@@ -3453,13 +3712,49 @@ with tabs[4]:
         for col, label in zip([g1, g2], ["MMT / MMIRS", "Lazuli 3-m"]):
             with col:
                 p = payload[label]
+                mx, my = break_lines_at_large_gaps(p["t"], p["m"])
+
                 fcmp = go.Figure()
-                fcmp.add_trace(go.Scatter(x=p["t"], y=p["f"], mode="markers", marker=dict(size=4), name=label))
-                fcmp.add_trace(go.Scatter(x=p["t"], y=p["m"], mode="lines", name="Injected model"))
-                fcmp.update_layout(template="plotly_dark", height=300, title=label, xaxis_title="Elapsed days", yaxis_title="Flux")
+                fcmp.add_trace(go.Scatter(
+                    x=p["t"], y=p["f"], mode="markers",
+                    marker=dict(size=4), name=label
+                ))
+                fcmp.add_trace(go.Scatter(
+                    x=mx, y=my, mode="lines",
+                    name="Injected model", connectgaps=False
+                ))
+
+                if label == "MMT / MMIRS":
+                    mmt_profile = ObservatoryProfiles.get_profile("MMT / MMIRS (Ground)")
+                    add_daytime_gap_shading(
+                        fcmp,
+                        baseline_days=float(np.max(p["t"]) + np.median(np.diff(p["t"])) if len(p["t"]) > 1 else np.max(p["t"])),
+                        night_hours=float(mmt_profile["night_hours"]),
+                        phase_offset_days=0.0,
+                    )
+
+                fcmp.update_layout(
+                    template="plotly_dark",
+                    height=300,
+                    title=label,
+                    xaxis_title="Elapsed days",
+                    yaxis_title="Flux",
+                )
                 st.plotly_chart(fcmp, use_container_width=True)
+
+                if label == "MMT / MMIRS":
+                    st.caption(
+                        "Gray regions are the idealized daytime intervals removed from the MMT sampling."
+                    )
+
                 fw = go.Figure(go.Scatter(x=p["pwin"], y=p["wwin"], mode="lines"))
-                fw.update_layout(template="plotly_dark", height=260, title="Sampling spectral window", xaxis_title="Period (d)", yaxis_title="Normalized window power")
+                fw.update_layout(
+                    template="plotly_dark",
+                    height=260,
+                    title="Sampling spectral window",
+                    xaxis_title="Period (d)",
+                    yaxis_title="Normalized window power",
+                )
                 st.plotly_chart(fw, use_container_width=True)
 
 # === OBSERVING PLANNER =========================================================
